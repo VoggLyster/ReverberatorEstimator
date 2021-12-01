@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 import functools
+from ReverberatorEstimator import layers
 
 def compute_time_shifting(y_true, y_pred, batch_size=100, samples_delay_max=100):
     
@@ -475,4 +476,22 @@ def multiScaleSpectralLoss(fft_sizes=(2048, 1024, 512, 256, 128, 64),
         return spectral_loss(y_true, y_pred)
     
    # Return a function
+    return loss
+
+class VisualSpectralLossLayer(tf.keras.layers.Layer):
+    def __init__(self):
+        super().__init__()
+        self.logmelgram = layers.LogMelgramLayer(1024, 256, 128, 48000, 0.0, 48000//2, 1e-6)
+        self.mse_loss = tf.keras.losses.MeanSquaredError()
+        
+    def call(self, target_audio, input_audio):
+        target_spec = self.logmelgram(target_audio)
+        input_spec = self.logmelgram(input_audio)
+        loss = self.mse_loss(target_spec, input_spec)
+        return loss
+
+def visualSpectralLoss():
+    vs_loss = VisualSpectralLossLayer()
+    def loss(y_true, y_pred):
+        return vs_loss(y_true,y_pred)
     return loss

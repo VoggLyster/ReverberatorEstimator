@@ -77,7 +77,7 @@ class VSTProcessor(tfkl.Layer):
         super(VSTProcessor, self).__init__(*args, **kwargs)
         self.sample_rate = sample_rate
         self.vst = load_plugin(path_to_vst)
-        self.epsilon = 0.01
+        self.epsilon = 0.1
       
     def set_parameters(self, parameters):
         params = np.copy(parameters)
