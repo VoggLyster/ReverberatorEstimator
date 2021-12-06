@@ -3,6 +3,8 @@ import tensorflow as tf
 import tensorflow.keras as tfk
 import tensorflow.keras.layers as tfkl
 from pedalboard import load_plugin
+import multiprocessing as mp
+import sys
 
 class LogMelgramLayer(tf.keras.layers.Layer):
     def __init__(
@@ -71,85 +73,163 @@ class LogMelgramLayer(tf.keras.layers.Layer):
         base_config = super(LogMelgramLayer, self).get_config()
         return dict(list(config.items()) + list(base_config.items()))  
 
+def setup_gradient_function(parallel_batch):
+    parallel_batch.init()
+    
+    @tf.custom_gradient
+    def process(signal, parameters):
+        x = np.array(signal)
+        params = np.array(parameters)     
+        def gradient(dy):
+            dy = np.array(dy)
+            return parallel_batch.run_gradient_batch(dy, x, params)
+
+        processed_audio = parallel_batch.run_forward_batch(x, params)
+        return processed_audio, gradient
+    return process
+
 ## VST Processor layer
 class VSTProcessor(tfkl.Layer):
     def __init__(self, path_to_vst, sample_rate, n_processors=8, *args, **kwargs):
         super(VSTProcessor, self).__init__(*args, **kwargs)
-        self.sample_rate = sample_rate
-        self.vsts = {}
-        for i in range(n_processors):
-            self.vsts[i] = load_plugin(path_to_vst)
         self.epsilon = 0.1
-
-      
-    def set_parameters(self, idx, parameters):
-        params = np.copy(parameters)
-        for i in range(len(params)):
-            for j, key in enumerate(self.vsts[idx].parameters.keys()):
-                if j == i:
-                    setattr(self.vsts[idx], key, params[i])
-    
-    def forward(self, idx, signal, params):
-        self.vsts[idx].reset()
-        self.set_parameters(idx, params)
-        return self.vsts[idx].process(signal, self.sample_rate)
-
-    def run_gradient(self, dy, x, y):
-        use_fd = False
-        vecJx = np.ones_like(x)
-        vecJy = np.zeros_like(y)
-        n_parameters = y[0].shape[0]
-        for i in range(dy.shape[0]):
-            if use_fd:
-                for j in range(n_parameters):
-                    y[i][j] = np.clip(y[i][j] + self.epsilon, 0.0, 1.0)
-                    J_plus = self.forward(i, x[i], y[i])
-
-                    y[i][j] = np.clip(y[i][j] - (2*self.epsilon), 0.0, 1.0)
-                    J_minus = self.forward(i, x[i], y[i])
-
-                    gradient = (J_plus - J_minus)/(2.0*self.epsilon)
-                    y[i][j] = y[i][j] + 1*self.epsilon
-                    vecJy[i][j] = np.dot(np.transpose(dy[i]), gradient)
-                
-            else: #use SPSA
-                c_k = self.epsilon
-                delta_k = np.random.binomial(1, .5, n_parameters)
-                delta_k[delta_k==0] = -1
-                y_i = y[i]
-                J_plus = self.forward(i, x[i], np.clip(y_i + c_k*delta_k, 0.0, 1.0))
-                J_minus = self.forward(i, x[i], np.clip(y_i - c_k*delta_k, 0.0, 1.0))
-                gradient_num = (J_plus - J_minus)
-                for j in range(n_parameters):
-                    gradient = gradient_num / (2*c_k*delta_k[j])
-                    vecJy[i][j] = np.dot(np.transpose(dy[i]), gradient)
-                
-                
-        return vecJx, vecJy
-            
-    @tf.custom_gradient
-    def process(self, signal: tf.Tensor, parameters: tf.Tensor) -> np.ndarray:
-        x = np.array(signal)
-        params = np.array(parameters)
-        self.set_parameters(0, params[0])      
-        def gradient(dy):
-            dy = np.array(dy)
-            return self.run_gradient(dy, x, params)
-            
-        processed_audio = self.vsts[0].process(x[0], self.sample_rate)
-        processed_audio = tf.reshape(processed_audio, (1,96000))
-            
-        return processed_audio, gradient
+        self.parallel_batch = Parallel_Batch(n_processors, path_to_vst, sample_rate)
         
     def build(self, input_shape):
         super(VSTProcessor, self).build(input_shape)
+        self.parallel_batch.init()
+        self.gradient_function = setup_gradient_function(self.parallel_batch)
     
     def call(self, inputs, training=None):
         x = inputs[0]
         parameters = inputs[1]
-        output_audio = tf.py_function(func=self.process, inp=[x, parameters], Tout=tf.float32)
+        output_audio = tf.py_function(func=self.gradient_function, inp=[x, parameters], Tout=tf.float32)
         return output_audio
     
     def get_config(self):
         config = super(VSTProcessor, self).get_config()
         return config
+
+def forward(vst, signal, params, sample_rate):
+    print("Running forward function")
+    sys.stdout.flush()
+    print(vst)
+    sys.stdout.flush()
+#     vst.reset()
+    print("VST reset")
+    sys.stdout.flush()
+    set_parameters(vst, params)
+    print("Params set")
+    sys.stdout.flush()
+    output = vst.process(signal, sample_rate)
+    print("Returning output of forward function")
+    sys.stdout.flush()
+    return output
+
+def set_parameters(vst, parameters):
+    params = np.copy(parameters)
+    for i in range(len(params)):
+        for j, key in enumerate(vst.parameters.keys()):
+            if j == i:
+                setattr(vst, key, params[i])
+
+def run_gradient(dy, x, y, vst, c_k, sample_rate):
+    vecJx = np.ones_like(x)
+    vecJy = np.zeros_like(y)
+    n_parameters = y.shape[0]
+    delta_k = np.random.binomial(1, .5, n_parameters)
+    delta_k[delta_k==0] = -1
+    J_plus = forward(vst, x, np.clip(y + c_k*delta_k, 0.0, 1.0), sample_rate)
+    J_minus = forward(vst, x, np.clip(y - c_k*delta_k, 0.0, 1.0), sample_rate)
+    gradient_num = J_plus - J_minus
+    for j in range(n_parameters):
+        gradient = gradient_num / (2*c_k*delta_k[j])
+        vecJy[j] = np.dot(np.transpose(dy), gradient)
+    return vecJx, vecJy
+
+
+class Parallel_Batch:
+    def __init__(self, n_processors, vst_path, sample_rate):
+        self.n_processors = n_processors
+        self.vst_path = vst_path
+        self.sample_rate = sample_rate
+        self.vsts = {}
+        self.procs = {}
+        for i in range(self.n_processors):
+            self.vsts[i] = load_plugin(self.vst_path)
+
+    def init(self):
+        print("Number of CPUs:", mp.cpu_count())
+        procs = {}
+        for i in range(self.n_processors):
+            vst = self.vsts[i]
+            q = mp.Queue()
+            p = mp.Process(target=Parallel_Batch.queue_function, 
+                args=(q, vst, self.sample_rate,))
+            p.start()
+            procs[i] = [p, q]
+
+        self.procs = procs
+
+    def __del__(self):
+        for key in self.procs:
+            self.procs[key][0].join() 
+        self.plugins = {}    
+        self.procs = {}
+
+    def queue_function(q, vst, sample_rate):
+        while True:
+            msg, value = q.get()
+            print(msg)
+            print(value)
+            sys.stdout.flush()
+            try:
+                if str(msg) == "grad":
+                    dy, x, y = value
+                    vecJx, vecJy = run_gradient(dy, x, y, vst, sample_rate)
+                    q.put(vecJx, vecJy)
+                elif str(msg) == "forward":
+                    signal, params = value
+                    print("Signal and params received")
+                    sys.stdout.flush()
+                    output = forward(vst, signal, params, sample_rate)
+                    print("output")
+                    sys.stdout.flush()
+                    q.put(output)
+                    print("output set")
+                    sys.stdout.flush()
+                elif str(msg) == "set_parameters":
+                    parameters = value
+                    set_parameters(vst, parameters)
+                elif str(msg) == "reset":
+                    vst.reset()
+            except:
+                pass
+    
+    def run_gradient_batch(self, dy, x, y):
+        for i in range(dy.shape[0]):
+            msg = ("grad", (dy[i], x[i], y[i]))
+            self.procs[i][1].put(msg)
+        
+        vecJx = np.empty_like(x)
+        vecJy = np.empty_like(y)
+        for i in range(dy.shape[0]):
+            vecJx[i], vecJy[i] = self.procs[i][1].get()
+        return vecJx, vecJy
+
+    def run_forward_batch(self, x, y):
+        print("Running forward batch")
+        for i in range(x.shape[0]):
+            print("Forward %i" % i)
+            msg = ("forward", (x[i], y[i]))
+            self.procs[i][1].put(msg)
+        output_batch = np.empty_like(x)
+        for i in range(x.shape[0]):
+            print("Receiving %i" % i)
+            print(self.procs[i][1])
+            output_batch[i] = self.procs[i][1].get()
+            print("Done receiving %i" % i)
+        return output_batch
+
+
+    
