@@ -79,7 +79,7 @@ class VSTProcessor(tfkl.Layer):
         self.vsts = {}
         for i in range(n_processors):
             self.vsts[i] = load_plugin(path_to_vst)
-        self.epsilon = 0.1
+        self.epsilon = 0.05
 
       
     def set_parameters(self, idx, parameters):
@@ -93,50 +93,50 @@ class VSTProcessor(tfkl.Layer):
         self.vsts[idx].reset()
         self.set_parameters(idx, params)
         return self.vsts[idx].process(signal, self.sample_rate)
-
+ 
     def run_gradient(self, dy, x, y):
-        use_fd = False
+        use_fd = True
         vecJx = np.ones_like(x)
         vecJy = np.zeros_like(y)
         n_parameters = y[0].shape[0]
         for i in range(dy.shape[0]):
+            dy_i = np.array(dy[i])
+            x_i = np.array(x[i])
+            y_i = np.array(y[i])
             if use_fd:
                 for j in range(n_parameters):
-                    y[i][j] = np.clip(y[i][j] + self.epsilon, 0.0, 1.0)
-                    J_plus = self.forward(i, x[i], y[i])
-
-                    y[i][j] = np.clip(y[i][j] - (2*self.epsilon), 0.0, 1.0)
-                    J_minus = self.forward(i, x[i], y[i])
-
+                    y_i[j] = np.clip(y_i[j] + self.epsilon, 0.0, 1.0)
+                    J_plus = self.forward(i, x_i, y_i)
+                    y_i[j] = np.clip(y_i[j] - (2*self.epsilon), 0.0, 1.0)
+                    J_minus = self.forward(i, x_i, y_i)
                     gradient = (J_plus - J_minus)/(2.0*self.epsilon)
-                    y[i][j] = y[i][j] + 1*self.epsilon
-                    vecJy[i][j] = np.dot(np.transpose(dy[i]), gradient)
+                    y_i[j] = y_i[j] + 1*self.epsilon
+                    vecJy[i][j] = np.dot(np.transpose(dy_i), gradient)
                 
             else: #use SPSA
                 c_k = self.epsilon
                 delta_k = np.random.binomial(1, .5, n_parameters)
                 delta_k[delta_k==0] = -1
-                y_i = y[i]
-                J_plus = self.forward(i, x[i], np.clip(y_i + c_k*delta_k, 0.0, 1.0))
-                J_minus = self.forward(i, x[i], np.clip(y_i - c_k*delta_k, 0.0, 1.0))
+                J_plus = self.forward(i, x_i, np.clip(y_i + c_k*delta_k, 0.0, 1.0))
+                J_minus = self.forward(i, x_i, np.clip(y_i - c_k*delta_k, 0.0, 1.0))
                 gradient_num = (J_plus - J_minus)
                 for j in range(n_parameters):
                     gradient = gradient_num / (2*c_k*delta_k[j])
-                    vecJy[i][j] = np.dot(np.transpose(dy[i]), gradient)
+                    vecJy[i][j] = np.dot(np.transpose(dy_i), gradient)
                 
                 
         return vecJx, vecJy
             
     @tf.custom_gradient
-    def process(self, signal: tf.Tensor, parameters: tf.Tensor) -> np.ndarray:
-        x = np.array(signal)
-        params = np.array(parameters)
-        self.set_parameters(0, params[0])      
+    def process(self, signal, parameters):
+        #x = np.array(signal)
+        #params = np.array(parameters)
+        #self.set_parameters(0, params[0])      
         def gradient(dy):
             dy = np.array(dy)
-            return self.run_gradient(dy, x, params)
+            return self.run_gradient(dy, signal, parameters)
             
-        processed_audio = self.vsts[0].process(x[0], self.sample_rate)
+        processed_audio = self.vsts[0].process(signal[0], self.sample_rate)
         processed_audio = tf.reshape(processed_audio, (1,96000))
             
         return processed_audio, gradient
