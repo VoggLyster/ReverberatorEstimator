@@ -3,8 +3,8 @@ import tensorflow as tf
 import functools
 from ReverberatorEstimator import layers
 
+# MultiScale Spectral Loss class copied from "Differentiable Signal Processing With Black-Box Audio Effects" https://arxiv.org/abs/2105.04752
 def compute_time_shifting(y_true, y_pred, batch_size=100, samples_delay_max=100):
-    
     
     @tf.function
     def shift(x, y, time_shift):
@@ -478,6 +478,8 @@ def multiScaleSpectralLoss(fft_sizes=(2048, 1024, 512, 256, 128, 64),
    # Return a function
     return loss
 
+# Custom loss class that compares two logmelgram spectrograms
+# Implemented for earlier testing 
 class VisualSpectralLossLayer(tf.keras.layers.Layer):
     def __init__(self):
         super().__init__()

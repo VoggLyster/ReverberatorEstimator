@@ -4,6 +4,7 @@ import tensorflow.keras as tfk
 import tensorflow.keras.layers as tfkl
 from pedalboard import load_plugin
 
+# LogMelgramLayer copied from "Differentiable Signal Processing With Black-Box Audio Effects" https://arxiv.org/abs/2105.04752
 class LogMelgramLayer(tf.keras.layers.Layer):
     def __init__(
         self, num_fft, hop_length, num_mels, sample_rate, f_min, f_max, eps, **kwargs
@@ -71,9 +72,11 @@ class LogMelgramLayer(tf.keras.layers.Layer):
         base_config = super(LogMelgramLayer, self).get_config()
         return dict(list(config.items()) + list(base_config.items()))  
 
-## VST Processor layer
 class VSTProcessor(tfkl.Layer):
+    # Custom audio processing layer extending the Keras Layer class
     def __init__(self, path_to_vst, sample_rate, n_processors=8, *args, **kwargs):
+        # Layer initializer function
+        # Instantiates a number of plugins equal to the batch size by the variable n_processors
         super(VSTProcessor, self).__init__(*args, **kwargs)
         self.sample_rate = sample_rate
         self.vsts = {}
@@ -83,6 +86,7 @@ class VSTProcessor(tfkl.Layer):
 
       
     def set_parameters(self, idx, parameters):
+        # Sets the parameter values of a plugin by the plugin index
         params = np.copy(parameters)
         for i in range(len(params)):
             for j, key in enumerate(self.vsts[idx].parameters.keys()):
@@ -90,11 +94,15 @@ class VSTProcessor(tfkl.Layer):
                     setattr(self.vsts[idx], key, params[i])
     
     def forward(self, idx, signal, params):
+        # Runs a signal through an indexed plugin 
+        # Resets the internal state of the plugin before processing
+        # Returns the processed signal
         self.vsts[idx].reset()
         self.set_parameters(idx, params)
         return self.vsts[idx].process(signal, self.sample_rate)
  
     def run_gradient(self, dy, x, y):
+        # Calculates the gradients using either FD or SPSA
         use_fd = True
         vecJx = np.ones_like(x)
         vecJy = np.zeros_like(y)
@@ -129,6 +137,8 @@ class VSTProcessor(tfkl.Layer):
             
     @tf.custom_gradient
     def process(self, signal, parameters):
+        # Processes the signal and returns the gradient function
+
         #x = np.array(signal)
         #params = np.array(parameters)
         #self.set_parameters(0, params[0])      
@@ -142,14 +152,17 @@ class VSTProcessor(tfkl.Layer):
         return processed_audio, gradient
         
     def build(self, input_shape):
+        # Keras build function - currently overrides nothing
         super(VSTProcessor, self).build(input_shape)
     
     def call(self, inputs, training=None):
+        # Keras call function - runs the custom process function through tf.py_function to allow for non-tensorflow processing
         x = inputs[0]
         parameters = inputs[1]
         output_audio = tf.py_function(func=self.process, inp=[x, parameters], Tout=tf.float32)
         return output_audio
     
     def get_config(self):
+        # Keras get_config function - currently overrides nothing
         config = super(VSTProcessor, self).get_config()
         return config
