@@ -6,7 +6,7 @@
 
 A custom implementation of a feedback delay network reverberator has been made as a VST3 using JUCE. 
 
-<img src="images/pluginGUIFull.png" alt="drawing" width="60%"/>
+<img src="images/pluginGUIFull.png" alt="drawing" width="100%"/>
 
 The source code to the repository can be found [here](https://github.com/VoggLyster/Reverberator), and the latest version compiled for x86_64 Ubuntu 18.04 can be found [here](https://github.com/VoggLyster/Reverberator/releases/latest) ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/VoggLyster/Reverberator)
 
