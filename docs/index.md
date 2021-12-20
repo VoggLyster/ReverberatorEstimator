@@ -8,7 +8,7 @@ A custom implementation of a feedback delay network reverberator has been made a
 
 ![Reverberator GUI](./images/pluginGUIFull.png)
 
-The source code to the repository can be found [here](https://github.com/VoggLyster/Reverberator), and the latest version compiled for x86_64 Ubuntu 18.04 can be found here ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/VoggLyster/Reverberator)
+The source code to the repository can be found [here](https://github.com/VoggLyster/Reverberator), and the latest version compiled for x86_64 Ubuntu 18.04 can be found [here](https://github.com/VoggLyster/Reverberator/releases/latest) ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/VoggLyster/Reverberator)
 
 --- 
 ## Neural Network
@@ -36,7 +36,7 @@ The second experiment has been made by creating a brighter and more metallic sou
 Again the model has been trained on the target sound, but this time the model had issues converging to the right result. Though it still converged after 50-something hours the training was cut short. 
 The current output sound can be heard here:
 
-<audio controls><source src='./audio/output_audio_d.wav'></audio>
+<audio controls><source src='./audio/output_audio_b.wav'></audio>
 
 The waveforms and spectrograms of the output and target can be seen in the following pictures.
 ![Dark sound output and target](./images/Bright1Audio.png)
