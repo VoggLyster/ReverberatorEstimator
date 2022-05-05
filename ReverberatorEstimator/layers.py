@@ -1,15 +1,14 @@
 import numpy as np
 import tensorflow as tf
-import tensorflow.keras as tfk
 import tensorflow.keras.layers as tfkl
 from pedalboard import load_plugin
 
-# LogMelgramLayer copied from "Differentiable Signal Processing With Black-Box Audio Effects" https://arxiv.org/abs/2105.04752
 class LogMelgramLayer(tf.keras.layers.Layer):
     def __init__(
-        self, num_fft, hop_length, num_mels, sample_rate, f_min, f_max, eps, **kwargs
+        self, frame_length, num_fft, hop_length, num_mels, sample_rate, f_min, f_max, eps, norm=False, **kwargs
     ):
         super(LogMelgramLayer, self).__init__(**kwargs)
+        self.frame_length = frame_length
         self.num_fft = num_fft
         self.hop_length = hop_length
         self.num_mels = num_mels
@@ -18,6 +17,7 @@ class LogMelgramLayer(tf.keras.layers.Layer):
         self.f_max = f_max
         self.eps = eps
         self.num_freqs = num_fft // 2 + 1
+        self.norm = norm
         lin_to_mel_matrix = tf.signal.linear_to_mel_weight_matrix(
             num_mel_bins=self.num_mels,
             num_spectrogram_bins=self.num_freqs,
@@ -33,13 +33,6 @@ class LogMelgramLayer(tf.keras.layers.Layer):
         super(LogMelgramLayer, self).build(input_shape)
 
     def call(self, input):
-        """
-        Args:
-            input (tensor): Batch of mono waveform, shape: (None, N)
-        Returns:
-            log_melgrams (tensor): Batch of log mel-spectrograms, shape: (None, num_frame, mel_bins, channel=1)
-        """
-
         def _tf_log10(x):
             numerator = tf.math.log(x)
             denominator = tf.math.log(tf.constant(10, dtype=numerator.dtype))
@@ -47,20 +40,25 @@ class LogMelgramLayer(tf.keras.layers.Layer):
 
         stfts = tf.signal.stft(
             input,
-            frame_length=self.num_fft,
+            frame_length=self.frame_length,
             frame_step=self.hop_length,
-            pad_end=False,  # librosa test compatibility
+            fft_length=self.num_fft,
+            pad_end=False,
         )
         mag_stfts = tf.abs(stfts)
 
-        melgrams = tf.tensordot(  # assuming channel_first, so (b, c, f, t)
+        melgrams = tf.tensordot(
             tf.square(mag_stfts), self.lin_to_mel_matrix, axes=[2, 0]
         )
         log_melgrams = _tf_log10(melgrams + self.eps)
-        return tf.expand_dims(log_melgrams, 3)
+        log_melgrams = tf.expand_dims(log_melgrams, 3)
+    
+            
+        return log_melgrams
 
     def get_config(self):
         config = {
+            'frame_length': self.frame_length,
             'num_fft': self.num_fft,
             'hop_length': self.hop_length,
             'num_mels': self.num_mels,
@@ -68,101 +66,145 @@ class LogMelgramLayer(tf.keras.layers.Layer):
             'f_min': self.f_min,
             'f_max': self.f_max,
             'eps': self.eps,
+            'norm': self.norm
         }
         base_config = super(LogMelgramLayer, self).get_config()
-        return dict(list(config.items()) + list(base_config.items()))  
+        return dict(list(config.items()) + list(base_config.items()))
+    
+def rademacher(shape):
+    x = np.random.binomial(1, .5, shape)
+    x[x==0] = -1
+    return x
 
+def uniform(shape):
+    return np.random.uniform(-1,1,shape)
+
+def set_parameter(vst, parameter_idx, parameter_value):
+    for i, key in enumerate(vst.parameters.keys()):
+        if i == parameter_idx:
+            setattr(vst, key, parameter_value*100.0)
+
+def rem_nans(x):
+    if np.isnan(x).any():
+        x = np.nan_to_num(x, copy=False, nan=100)
+    return np.clip(x, -100, 100)    
+            
+def forward(signal, params, param_map, vst, sample_rate):
+    vst.reset()
+    for i in range(len(params)):
+        set_parameter(vst, param_map[i], params[i])
+    ret = vst.process(signal, sample_rate)
+    return rem_nans(ret)
+
+def grad_batch_item(dye, xe, ye, vst, param_map, sample_rate, epsilon):
+    vecJxe = np.ones_like(xe)
+    vecJye = np.zeros_like(ye)
+    c_k = epsilon
+    delta_k = rademacher(ye.shape)
+    J_plus = forward(xe, np.clip(ye + c_k * delta_k, 0.0, 1.0), param_map, vst, sample_rate)
+    J_minus = forward(xe, np.clip(ye - c_k * delta_k, 0.0, 1.0), param_map, vst, sample_rate)
+    grady_num = (J_plus - J_minus)
+    for i in range(len(ye)):
+        grady = grady_num / (2 * c_k * delta_k[i])
+        vecJye[i] = np.dot(np.transpose(dye), grady)
+
+    return vecJxe, vecJye
+
+## VST Processor layer
 class VSTProcessor(tfkl.Layer):
-    # Custom audio processing layer extending the Keras Layer class
-    def __init__(self, path_to_vst, sample_rate, n_processors=8, *args, **kwargs):
-        # Layer initializer function
-        # Instantiates a number of plugins equal to the batch size by the variable n_processors
+    def __init__(self, path_to_vst, sample_rate, n_processors, epsilon, 
+            parameter_map, non_learnable_parameters, *args, **kwargs):
         super(VSTProcessor, self).__init__(*args, **kwargs)
         self.sample_rate = sample_rate
-        self.vsts = {}
-        for i in range(n_processors):
-            self.vsts[i] = load_plugin(path_to_vst)
-        self.epsilon = 0.05
+        self.path_to_vst = path_to_vst
+        self.n_processors = n_processors
+        self.epsilon = epsilon
 
-      
-    def set_parameters(self, idx, parameters):
-        # Sets the parameter values of a plugin by the plugin index
-        params = np.copy(parameters)
-        for i in range(len(params)):
-            for j, key in enumerate(self.vsts[idx].parameters.keys()):
-                if j == i:
-                    setattr(self.vsts[idx], key, params[i])
-    
-    def forward(self, idx, signal, params):
-        # Runs a signal through an indexed plugin 
-        # Resets the internal state of the plugin before processing
-        # Returns the processed signal
-        self.vsts[idx].reset()
-        self.set_parameters(idx, params)
-        return self.vsts[idx].process(signal, self.sample_rate)
- 
-    def run_gradient(self, dy, x, y):
-        # Calculates the gradients using either FD or SPSA
-        use_fd = True
-        vecJx = np.ones_like(x)
-        vecJy = np.zeros_like(y)
-        n_parameters = y[0].shape[0]
-        for i in range(dy.shape[0]):
-            dy_i = np.array(dy[i])
-            x_i = np.array(x[i])
-            y_i = np.array(y[i])
-            if use_fd:
-                for j in range(n_parameters):
-                    y_i[j] = np.clip(y_i[j] + self.epsilon, 0.0, 1.0)
-                    J_plus = self.forward(i, x_i, y_i)
-                    y_i[j] = np.clip(y_i[j] - (2*self.epsilon), 0.0, 1.0)
-                    J_minus = self.forward(i, x_i, y_i)
-                    gradient = (J_plus - J_minus)/(2.0*self.epsilon)
-                    y_i[j] = y_i[j] + 1*self.epsilon
-                    vecJy[i][j] = np.dot(np.transpose(dy_i), gradient)
-                
-            else: #use SPSA
-                c_k = self.epsilon
-                delta_k = np.random.binomial(1, .5, n_parameters)
-                delta_k[delta_k==0] = -1
-                J_plus = self.forward(i, x_i, np.clip(y_i + c_k*delta_k, 0.0, 1.0))
-                J_minus = self.forward(i, x_i, np.clip(y_i - c_k*delta_k, 0.0, 1.0))
-                gradient_num = (J_plus - J_minus)
-                for j in range(n_parameters):
-                    gradient = gradient_num / (2*c_k*delta_k[j])
-                    vecJy[i][j] = np.dot(np.transpose(dy_i), gradient)
-                
-                
-        return vecJx, vecJy
-            
+        self.mb = Parallel_Batch(self.sample_rate, self.path_to_vst, self.n_processors, self.epsilon,
+            parameter_map, non_learnable_parameters)
+
+
     @tf.custom_gradient
     def process(self, signal, parameters):
-        # Processes the signal and returns the gradient function
-
-        #x = np.array(signal)
-        #params = np.array(parameters)
-        #self.set_parameters(0, params[0])      
+        processed_audio = self.forward_batch(signal, parameters)  
         def gradient(dy):
             dy = np.array(dy)
             return self.run_gradient(dy, signal, parameters)
-            
-        processed_audio = self.vsts[0].process(signal[0], self.sample_rate)
-        processed_audio = tf.reshape(processed_audio, (1,96000))
-            
+
         return processed_audio, gradient
         
     def build(self, input_shape):
-        # Keras build function - currently overrides nothing
         super(VSTProcessor, self).build(input_shape)
+        self.vst_func = setup_custom_vst_op(self.mb)
     
     def call(self, inputs, training=None):
-        # Keras call function - runs the custom process function through tf.py_function to allow for non-tensorflow processing
         x = inputs[0]
         parameters = inputs[1]
-        output_audio = tf.py_function(func=self.process, inp=[x, parameters], Tout=tf.float32)
-        return output_audio
+        ret = tf.py_function(func=self.vst_func, inp=[x, parameters], Tout=tf.float32)
+        ret.set_shape(x.get_shape())
+        return ret
     
     def get_config(self):
-        # Keras get_config function - currently overrides nothing
         config = super(VSTProcessor, self).get_config()
         return config
+
+    def print_current_parameters(self):
+        self.mb.print_current_parameters()
+
+
+class Parallel_Batch:
+    def __init__(self, sample_rate, path_to_vst, n_processors, epsilon, 
+            parameter_map, non_learnable_parameters={}):
+        self.sample_rate = sample_rate
+        self.n_processors = n_processors
+        self.epsilon = epsilon
+        self.path_to_vst = path_to_vst
+        self.parameter_map = parameter_map
+        self.non_learnable_parameters = non_learnable_parameters
+        self.vsts = {}
+
+    def init(self):
+        self.vsts = {}
+        for i in range(self.n_processors):
+            self.vsts[i] = load_plugin(self.path_to_vst)
+            if self.non_learnable_parameters:
+                for k in self.non_learnable_parameters:
+                    set_parameter(self.vsts[i], k, self.non_learnable_parameters[k])
+
+    def run_grad_batch(self, dy, x, y):
+        vecJx = np.empty_like(x)
+        vecJy = np.empty_like(y)
+        for i in range(self.n_processors):
+            vecJx[i], vecJy[i] = grad_batch_item(dy[i], x[i], y[i], self.vsts[i], self.parameter_map, self.sample_rate, self.epsilon)
+        return vecJx, vecJy
+
+    def run_forward_batch(self, x, y):
+        z = np.empty_like(x)
+        for i in range(x.shape[0]):
+            z[i] = forward(x[i], y[i], self.parameter_map, self.vsts[i], self.sample_rate)
+        return z
+
+    def print_current_parameters(self): 
+        parameters = self.vsts[0].parameters
+        for _, idx in enumerate(self.parameter_map.values()):
+            for i, key in enumerate(parameters.keys()):
+                if i == idx:
+                    print('\n', key, ':', parameters[key])
+
+def setup_custom_vst_op(mb):
+    mb.init()
+
+    @tf.custom_gradient
+    def custom_grad_numeric_batch(x,y):
+        x = np.array(x)
+        y = np.array(y)
+
+        def grad_batch(dy):
+            dy = np.array(dy)
+            return mb.run_grad_batch(dy, x, y)
+
+        z = mb.run_forward_batch(x, y)
+
+        return z, grad_batch
+
+    return custom_grad_numeric_batch
