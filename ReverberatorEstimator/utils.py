@@ -163,6 +163,31 @@ def generate_MUSHRA_ready_audio(vst_path, parameters, sample_rate=44100):
             
     return audio_data, audio_names
 
+def generate_MUSHRA_anchor_audio(vst_path, parameters, sample_rate):
+    vst = load_plugin(vst_path)
+    params = np.copy(parameters)
+    audio_data = []
+    audio_names = []
+
+    seconds = 12
+    sample_length = seconds * sample_rate
+
+    reduced_params = params[0:27]
+    for root, sub, files in os.walk('./MUSHRA_audio/Dry'):
+        files = sorted(files)
+        for f in files:
+            audio = load_audio_file(os.path.join(root, f))
+            audio = fix_length(audio, size=sample_length)
+            for i in range(len(reduced_params)):
+                for j, key in enumerate(vst.parameters.keys()):
+                    if j == i:
+                        setattr(vst, key, reduced_params[i]*100.0)
+            audio_data.append(vst.process(audio, sample_rate))
+            audio_names.append(f)
+            
+    return audio_data, audio_names
+
+
 def display_audio_files(data, sample_rate=44100):
     for d in data:
         IPython.display.display(IPython.display.Audio(d, rate=sample_rate))

@@ -6,7 +6,7 @@ k['epochs'] = 3000
 k['n_processors'] = 4
 k['steps_per_epoch'] = 1
 k['epsilon'] = 0.01
-k['learning_rate'] = 1e-5
+k['learning_rate'] = 1e-6
 
 k['dry_audio_path'] = './Dataset/Dry/0.wav'
 k['wet_audio_path'] = './Dataset/Wet/AbletonReverb/0.wav'

@@ -146,12 +146,6 @@ class ReverberationLoss(tf.keras.layers.Layer):
 
                 loss += self.spectral_loss_weight * mean_difference(target_mag, output_mag,
                     self.spectral_loss_type)
-
-        if self.spectral_loss_weight > 0.0:
-            target_spectral = get_spectral(target_audio, normalize=False)
-            output_spectral = get_spectral(output_audio, normalize=False)
-            loss += self.spectral_loss_weight * mean_difference(target_spectral, output_spectral,
-                self.spectral_loss_type)
             
         if self.time_loss_weight > 0:
             loss += self.time_loss_weight * mean_difference(target_audio, output_audio,
