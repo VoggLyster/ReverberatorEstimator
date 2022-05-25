@@ -11,7 +11,7 @@ This repository contains:
 * a folder containing python implementation of custom layers and loss - [ReverberatorEstimator](https://github.com/VoggLyster/ReverberatorEstimator/tree/main/ReverberatorEstimator)
 * a small dataset for running the training - [Dataset](https://github.com/VoggLyster/ReverberatorEstimator/tree/main/Dataset)
 * a small Notebook for checking and writing out the parameters of a VST3 plugin [TestParameters.ipynb](https://github.com/VoggLyster/ReverberatorEstimator/blob/main/TestParameters.ipynb)
-
+* a requirements.txt for Python environment setup - [requirements.txt](https://github.com/VoggLyster/ReverberatorEstimator/blob/main/requirements.txt)
 
 ---
 ## Examples
