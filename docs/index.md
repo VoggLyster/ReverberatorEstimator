@@ -1,4 +1,8 @@
-# Parameter Estimation of Reverberation Using a Neural Network
+# Parametric Tuning of Extended Reverberation Algorithm Using Neural Network
+
+**Master Thesis by Søren Vøgg K. Lyster**
+
+*Sound and Music Computing, 2022-05*
 
 ## Feedback Delay Network Reverberator 
 
@@ -6,7 +10,7 @@
 
 A custom implementation of a feedback delay network reverberator has been made as a VST3 using JUCE. 
 
-<img src="images/pluginGUIFull.png" alt="drawing" width="100%"/>
+<img src="images/guifade.png" alt="drawing" width="40%"/>
 
 The source code to the repository can be found [here](https://github.com/VoggLyster/Reverberator), and the latest version compiled for x86_64 Ubuntu 18.04 can be found [here](https://github.com/VoggLyster/Reverberator/releases/latest) ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/VoggLyster/Reverberator)
 
@@ -15,34 +19,80 @@ The source code to the repository can be found [here](https://github.com/VoggLys
 The neural network for estimating the reverberator parameters can be found [here](https://github.com/VoggLyster/Reverberator). The Jupyter Notebook [ReverberatorEstimator.ipynb](https://github.com/VoggLyster/ReverberatorEstimator/blob/main/ReverberatorEstimator.ipynb) contains the setup that has been used to create the network. 
 
 ---
-## Examples
-Two experiments has been made and reported on. Both examples uses a dry and wet finger snapping sound as an input.
+## Evaluation
+The evaluation has been done with three different blackbox reverberators. Impulse responses have been created for all three cases with the following input audio:
 
 <audio controls><source src='audio/input_audio.wav'></audio>
-### Experiment 1 - "Dark" reverb
-The first experiment has been made by using the custom plugin to create a dark sounding 
-reverb sounding like this:
 
-<audio controls><source src='./audio/target_audio_d.wav'></audio>
+### Hall Of Fame 2 - By TC Electronic
 
-Using this sound as a target the model has been trained until it produced an output sounding like this:
+Impulse response (Target / Estimated):
 
-<audio controls><source src='./audio/output_audio_d.wav'></audio>
+<audio controls><source src='./audio/hofTarget.wav'></audio>
+<audio controls><source src='./audio/hofOutput.wav'></audio>
 
-The waveforms and spectrograms of the output and target can be seen in the following pictures.
+Drums (Blackbox / Estimated):
 
-![Dark sound output and target](./images/Dark1Audio.png)
+<audio controls><source src='./audio/HoFDrums.wav'></audio>
+<audio controls><source src='./audio/est_HoFDrums.wav'></audio>
 
-### Experiment 2 - "Bright" reverb
-The second experiment has been made by creating a brighter and more metallic sounding reverbed signal:
+Piano (Blackbox / Estimated):
 
-<audio controls><source src='./audio/target_audio_b.wav'></audio>
+<audio controls><source src='./audio/HoFPiano.wav'></audio>
+<audio controls><source src='./audio/est_HoFPiano.wav'></audio>
 
-Again the model has been trained on the target sound, but this time the model had issues converging to the right result. Though it still converged after 50-something hours the training was cut short. 
-The current output sound can be heard here:
+Vocals (Blackbox / Estimated):
 
-<audio controls><source src='./audio/output_audio_b.wav'></audio>
+<audio controls><source src='./audio/HoFVocals.wav'></audio>
+<audio controls><source src='./audio/est_HoFVocals.wav'></audio>
 
-The waveforms and spectrograms of the output and target can be seen in the following pictures.
+[Figures for blackbox/estimated](./images/hofImages.png)
 
-![Dark sound output and target](./images/Bright1Audio.png)
+### Ableton Live Reverb - By Ableton 
+
+Impulse response (Target / Estimated):
+
+<audio controls><source src='./audio/abletonTarget.wav'></audio>
+<audio controls><source src='./audio/abletonOutput.wav'></audio>
+
+Drums (Blackbox / Estimated):
+
+<audio controls><source src='./audio/AbletonDrums.wav'></audio>
+<audio controls><source src='./audio/est_AbletonDrums.wav'></audio>
+
+Piano (Blackbox / Estimated):
+
+<audio controls><source src='./audio/AbletonPiano.wav'></audio>
+<audio controls><source src='./audio/est_AbletonPiano.wav'></audio>
+
+Vocals (Blackbox / Estimated):
+
+<audio controls><source src='./audio/AbletonVocals.wav'></audio>
+<audio controls><source src='./audio/est_AbletonVocals.wav'></audio>
+
+[Figures for blackbox/estimated](./images/abletonImages.png)
+
+### Valhalla Room - By ValhallaDSP
+
+Impulse response (Target / Estimated):
+
+<audio controls><source src='./audio/valTarget.wav'></audio>
+<audio controls><source src='./audio/valOutput.wav'></audio>
+
+
+Drums (Blackbox / Estimated):
+
+<audio controls><source src='./audio/ValhallaDrums.wav'></audio>
+<audio controls><source src='./audio/est_ValhallaDrums.wav'></audio>
+
+Piano (Blackbox / Estimated):
+
+<audio controls><source src='./audio/ValhallaPiano.wav'></audio>
+<audio controls><source src='./audio/est_ValhallaPiano.wav'></audio>
+
+Vocals (Blackbox / Estimated):
+
+<audio controls><source src='./audio/ValhallaVocals.wav'></audio>
+<audio controls><source src='./audio/est_ValhallaVocals.wav'></audio>
+
+[Figures for blackbox/estimated](./images/valImages.png)
