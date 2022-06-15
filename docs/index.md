@@ -43,8 +43,8 @@ Piano (Blackbox / Estimated):
 
 Vocals (Blackbox / Estimated):
 
-<audio controls><source src='./audio/HoFVocals.wav'></audio>
-<audio controls><source src='./audio/est_HoFVocals.wav'></audio>
+<audio controls><source src='./audio/HoFVox.wav'></audio>
+<audio controls><source src='./audio/est_HoFVox.wav'></audio>
 
 [Figures for blackbox/estimated](./images/hofImages.png)
 
@@ -67,8 +67,8 @@ Piano (Blackbox / Estimated):
 
 Vocals (Blackbox / Estimated):
 
-<audio controls><source src='./audio/AbletonVocals.wav'></audio>
-<audio controls><source src='./audio/est_AbletonVocals.wav'></audio>
+<audio controls><source src='./audio/AbletonVox.wav'></audio>
+<audio controls><source src='./audio/est_AbletonVox.wav'></audio>
 
 [Figures for blackbox/estimated](./images/abletonImages.png)
 
@@ -82,17 +82,17 @@ Impulse response (Target / Estimated):
 
 Drums (Blackbox / Estimated):
 
-<audio controls><source src='./audio/ValhallaDrums.wav'></audio>
+<audio controls><source src='./audio/ValDrums.wav'></audio>
 <audio controls><source src='./audio/est_ValhallaDrums.wav'></audio>
 
 Piano (Blackbox / Estimated):
 
-<audio controls><source src='./audio/ValhallaPiano.wav'></audio>
+<audio controls><source src='./audio/ValPiano.wav'></audio>
 <audio controls><source src='./audio/est_ValhallaPiano.wav'></audio>
 
 Vocals (Blackbox / Estimated):
 
-<audio controls><source src='./audio/ValhallaVocals.wav'></audio>
-<audio controls><source src='./audio/est_ValhallaVocals.wav'></audio>
+<audio controls><source src='./audio/ValVox.wav'></audio>
+<audio controls><source src='./audio/est_ValhallaVox.wav'></audio>
 
 [Figures for blackbox/estimated](./images/valImages.png)
